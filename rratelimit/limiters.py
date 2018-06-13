@@ -11,11 +11,10 @@ class ListLimiter(LuaLimiter):
         self.limit = limit
         self.period = period
 
-    def register_all(self, redis):
-        self._insert = self.register_script(redis, 'list_insert')
-        self._check = self.register_script(redis, 'list_check')
-        self._checked_insert = self.register_script(redis,
-                                                    'list_checked_insert')
+    async def register_all(self):
+        self._insert_script = await self.register_script(self.redis, 'list_insert')
+        self._check_script = await self.register_script(self.redis, 'list_check')
+        self._checked_insert = await self.register_script(self.redis, 'list_checked_insert')
 
     def clear(self, actor):
         self.redis.delete(self.get_key(actor))
@@ -34,12 +33,12 @@ class ListLimiter(LuaLimiter):
             client=client
         ))
 
-    def checked_insert(self, actor, client=None):
-        return bool(self._checked_insert(
+    async def checked_insert(self, actor, client=None):
+        val = await self._checked_insert(
             keys=[self.get_key(actor), ],
             args=[time.time(), self.period, self.limit],
-            client=client,
-        ))
+            client=client)
+        return bool(val)
 
 
 class HashLimiter(LuaLimiter):

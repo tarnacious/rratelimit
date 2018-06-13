@@ -25,26 +25,31 @@ class AbstractLimiter(object):
 
 class LuaLimiter(AbstractLimiter):
 
-    def __setattr__(self, name, value):
-        if name == 'redis':
-            self.check_ver(value)
-            self.register_all(value)
-        super(LuaLimiter, self).__setattr__(name, value)
+    async def setup(self):
+        await self.check_ver()
+        await self.register_all()
 
-    def register_script(self, redis, scriptname):
+    async def register_script(self, redis, scriptname):
         """Register script located at ./lua/<scriptname>.lua"""
         path = os.path.join(basepath, 'lua', scriptname+'.lua')
-        return redis.register_script(open(path).read())
+        script = await redis.script_load(open(path).read())
+
+        async def exec_script(keys=[], args=[], client=None):
+            return await self.redis.evalsha(script, keys=keys, args=args)
+
+        return exec_script
 
     def register_all(self, *args, **kwargs):
         """Registers all lua scripts on redis instance'
            Must be overridden by child."""
         raise NotImplementedError
 
-    def check_ver(self, redis):
+    async def check_ver(self):
         def versiontuple(v):
             return tuple(map(int, (v.split("."))))
-        version = redis.info()['redis_version']
+
+        info = await self.redis.info()
+        version = info['server']['redis_version']
         if versiontuple(version) < versiontuple("2.6.0"):
             raise UnsupportedRedisVersion(version)
 
